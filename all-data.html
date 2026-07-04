@@ -44,7 +44,7 @@
 
 <main class="wrap">
 
-  <!-- ============ file slots (shared with dashboard, + GEQ) .============ -->
+  <!-- ============ file slots (shared with dashboard, + GEQ) ============ -->
   <section class="ledger" aria-label="Data files">
     <p class="ledger-note">Data loaded here is shared with the Dashboard page. Drop the game CSVs and the
       <strong>GEQ export</strong> (from your GEQ Toolkit's researcher dashboard) anywhere on the page.</p>
@@ -134,6 +134,23 @@
             <tbody></tbody>
           </table>
         </div>
+      </div>
+    </section>
+
+    <!-- ============ link participants ============ -->
+    <section class="panel" id="linkSec" hidden>
+      <div class="panel-head">
+        <h2>Link participants</h2><span class="src-tag">GEQ ↔ game</span>
+      </div>
+      <p class="hint" style="margin-top:0">IDs that match a PlayerName link automatically. For everyone else, pick who they were in the game —
+        links are saved in this browser and feed the combined analysis below.</p>
+      <div class="table-scroll">
+        <table id="linkTable">
+          <thead><tr>
+            <th>GEQ participant</th><th>Status</th><th>Game player</th><th></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
       </div>
     </section>
 

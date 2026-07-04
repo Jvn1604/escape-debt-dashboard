@@ -26,6 +26,14 @@
   ];
   let combComponent = "Flow";
 
+  // ---------- manual participant links (GEQ id -> game PlayerName) ----------
+  const LINK_KEY = "etd-participant-links-v1";
+  let links = {};
+  try { links = JSON.parse(localStorage.getItem(LINK_KEY) || "{}"); } catch (e) { links = {}; }
+  function saveLinks() {
+    try { localStorage.setItem(LINK_KEY, JSON.stringify(links)); } catch (e) {}
+  }
+
   window.renderPage = function () {
     const any = DATASETS.some((ds) => state[ds].length > 0);
     $("#ad-empty").hidden = any;
@@ -39,6 +47,7 @@
       document.querySelector("#adModeStats").hidden = !ok;
     }
     if (state.geq.length) renderGeq();
+    renderLinks();
     renderCombined();
     renderConclusions();
     for (const ds of DATASETS) ($(`#dl-${ds}`) || {}).disabled = state[ds].length === 0;
@@ -62,8 +71,7 @@
   }
   const rStrength = (r) => (Math.abs(r) >= 0.6 ? "strong" : Math.abs(r) >= 0.3 ? "moderate" : "weak");
 
-  // one entry per participant that appears in BOTH the GEQ export and the run summary
-  function buildMatches() {
+  function gameGroups() {
     const games = new Map(); // matchKey -> aggregate of that player's runs
     for (const r of state.runs) {
       const k = matchKey(G("runs", r, "PlayerName"));
@@ -80,14 +88,52 @@
       const order = { win: 3, survived: 2, burnout: 1 };
       if ((order[o] || 0) > (order[norm(g.best)] || 0)) g.best = G("runs", r, "Outcome");
     }
+    return games;
+  }
+
+  // one entry per participant connected to game runs — automatically (ID ==
+  // PlayerName) or through a manual link from the Link participants table
+  function buildMatches() {
+    const games = gameGroups();
     const matched = [], unmatched = [];
     for (const q of state.geq) {
       const id = G("geq", q, "participant_id");
-      const g = games.get(matchKey(id));
-      if (g) matched.push({ id, geq: q, game: g });
+      const linkedName = links[id];
+      const g = (linkedName && games.get(matchKey(linkedName))) || games.get(matchKey(id));
+      if (g) matched.push({ id, geq: q, game: g, manual: !!(linkedName && games.get(matchKey(linkedName))) });
       else unmatched.push(id);
     }
     return { matched, unmatched };
+  }
+
+  // ---------- link participants table ----------
+  function renderLinks() {
+    const sec = $("#linkSec");
+    if (!state.runs.length || !state.geq.length) { sec.hidden = true; return; }
+    sec.hidden = false;
+    const games = gameGroups();
+    const players = [...new Set(state.runs.map((r) => G("runs", r, "PlayerName")).filter(Boolean))];
+
+    $("#linkTable tbody").innerHTML = state.geq.map((q) => {
+      const id = G("geq", q, "participant_id");
+      const auto = games.has(matchKey(id));
+      const linked = links[id] && games.has(matchKey(links[id]));
+      const status = linked
+        ? '<span class="chip guided">LINKED</span>'
+        : auto
+          ? '<span class="chip win">AUTO</span>'
+          : '<span class="chip burnout">UNLINKED</span>';
+      const opts = players.map((p) =>
+        `<option value="${esc(p)}"${links[id] === p ? " selected" : ""}>${esc(p)}</option>`).join("");
+      return `<tr>
+        <td>${esc(id)}</td>
+        <td>${status}</td>
+        <td><select class="link-sel" data-id="${esc(id)}">
+          <option value="">${auto ? "auto (same ID)" : "— choose player —"}</option>${opts}
+        </select></td>
+        <td>${links[id] ? `<button class="btn ghost link-clear" data-id="${esc(id)}" type="button">Unlink</button>` : ""}</td>
+      </tr>`;
+    }).join("");
   }
 
   // ---------- GEQ section ----------
@@ -202,7 +248,7 @@
 
     $("#matchTable tbody").innerHTML = matched.map((m) => `
       <tr>
-        <td>${esc(m.id)}</td>
+        <td>${esc(m.id)}${m.manual ? ' <span class="chip guided">LINKED</span>' : ""}</td>
         <td>${m.game.modes.size ? [...m.game.modes].map((md) => `<span class="chip ${md.toLowerCase()}">${md}</span>`).join(" ") : "–"}</td>
         <td class="num">${m.game.runs.length}</td>
         <td><span class="chip ${norm(m.game.best)}">${esc(m.game.best)}</span></td>
@@ -211,7 +257,7 @@
         <td class="num">${fmt(N("geq", m.geq, "core_score_Positive_Affect"), 2)}</td>
       </tr>`).join("");
     $("#unmatchedNote").textContent = unmatched.length
-      ? `Not matched to any game run: ${unmatched.join(", ")} (check the PlayerName typed in-game).`
+      ? `Not matched to any game run: ${unmatched.join(", ")} — link them manually in the table above.`
       : "";
   }
 
@@ -293,7 +339,7 @@
       } else if (matched.length > 0) {
         add("warn", `Only ${matched.length} GEQ participant${matched.length === 1 ? " was" : "s were"} matched to game runs — collect more paired data before drawing combined conclusions.`);
       } else {
-        add("warn", `No GEQ participant IDs matched any in-game PlayerName — ask testers to enter the same ID (e.g. P01) in both the game and the questionnaire.`);
+        add("warn", `No GEQ participant IDs matched any in-game PlayerName — connect them in the Link participants table below, or ask testers to enter the same ID (e.g. P01) in both the game and the questionnaire.`);
       }
     } else {
       add("info", state.runs.length
@@ -312,6 +358,26 @@
     combComponent = btn.dataset.comp;
     document.querySelectorAll("#combSeg .seg-btn").forEach((b) => b.classList.toggle("active", b === btn));
     renderCombined();
+  });
+
+  $("#linkTable").addEventListener("change", (e) => {
+    const sel = e.target.closest(".link-sel");
+    if (!sel) return;
+    if (sel.value) links[sel.dataset.id] = sel.value;
+    else delete links[sel.dataset.id];
+    saveLinks();
+    renderLinks();
+    renderCombined();
+    renderConclusions();
+  });
+  $("#linkTable").addEventListener("click", (e) => {
+    const btn = e.target.closest(".link-clear");
+    if (!btn) return;
+    delete links[btn.dataset.id];
+    saveLinks();
+    renderLinks();
+    renderCombined();
+    renderConclusions();
   });
 
   for (const ds of DATASETS) {

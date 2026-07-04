@@ -148,6 +148,27 @@ console.log("--- all-data.html ---");
 
   // GEQ link points at the toolkit
   assert(doc.getElementById("geqLink").href.includes("geq-toolkit"), "GEQ nav link targets the geq-toolkit site");
+
+  // manual participant linking connects GEQ to game data
+  const gl = win.document;
+  const noAuto = read("sample_data", "geq_all.csv").replace('"Kayal"', '"P77"');
+  app.clearAll();
+  win.localStorage.removeItem("etd-participant-links-v1");
+  app.ingestParsed(parsed(texts["EscapeDebt_RunSummary.csv"]), "EscapeDebt_RunSummary.csv");
+  app.ingestParsed(parsed(noAuto), "geq_all.csv");
+  assert(gl.getElementById("linkSec").hidden === false, "link table appears when runs + GEQ are loaded");
+  assert([...gl.querySelectorAll("#linkTable .chip")].filter((c) => c.textContent === "UNLINKED").length === 1,
+    "unmatched participant shows UNLINKED status");
+  const sel = [...gl.querySelectorAll(".link-sel")].find((s) => s.dataset.id === "P77");
+  sel.value = "Kayal";
+  sel.dispatchEvent(new win.Event("change", { bubbles: true }));
+  assert(gl.querySelectorAll("#matchTable tbody tr").length === 5, "manual link raises matched participants to 5");
+  assert([...gl.querySelectorAll("#matchTable td")].some((td) => td.textContent.includes("LINKED")),
+    "manually linked participant is tagged in the match table");
+  assert(win.localStorage.getItem("etd-participant-links-v1").includes("P77"), "links persist to localStorage");
+  const clearBtn2 = gl.querySelector(".link-clear");
+  clearBtn2.dispatchEvent(new win.Event("click", { bubbles: true }));
+  assert(gl.querySelectorAll("#matchTable tbody tr").length === 4, "unlink drops the participant back out");
 }
 
 console.log(failed ? `\n${failed} test(s) FAILED` : "\nAll tests passed");
