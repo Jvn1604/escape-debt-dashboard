@@ -169,6 +169,25 @@ console.log("--- all-data.html ---");
   const clearBtn2 = gl.querySelector(".link-clear");
   clearBtn2.dispatchEvent(new win.Event("click", { bubbles: true }));
   assert(gl.querySelectorAll("#matchTable tbody tr").length === 4, "unlink drops the participant back out");
+  // research-grade conclusions: grouped sections, descriptives, correlation matrix
+  app.clearAll();
+  win.localStorage.removeItem("etd-participant-links-v1");
+  app.ingestParsed(parsed(texts["EscapeDebt_RunSummary.csv"]), "EscapeDebt_RunSummary.csv");
+  app.ingestParsed(parsed(texts["EscapeDebt_DailyHistory.csv"]), "EscapeDebt_DailyHistory.csv");
+  app.ingestParsed(parsed(texts["EscapeDebt_Analytics.csv"]), "EscapeDebt_Analytics.csv");
+  app.ingestParsed(parsed(read("sample_data", "geq_all.csv")), "geq_all.csv");
+  const heads = [...gl.querySelectorAll("#verdictList .v-head")].map((h) => h.textContent);
+  assert(heads.length >= 5, `conclusions grouped under headings (got ${heads.length})`);
+  assert(heads.some((h) => h.includes("limitations")), "limitations section present");
+  const vtext = gl.getElementById("verdictList").textContent;
+  assert(/M = [\d.,]+%, SD = [\d.,]+%/.test(vtext), "descriptives report M and SD with units");
+  assert(vtext.includes("Outcome distribution"), "gameplay section reports outcome distribution");
+  assert(vtext.includes("p < .05"), "significance threshold stated for correlations");
+  assert(gl.getElementById("corrWrap").hidden === false, "correlation matrix visible with 5 matched participants");
+  assert(gl.querySelectorAll("#corrTable tbody td.rcell").length === 28, "matrix covers 7 GEQ components x 4 game metrics");
+  assert(gl.getElementById("corrNote").textContent.includes("Pearson"), "matrix footnote explains the statistic");
+  assert(!!gl.getElementById("copyConcBtn"), "copy-for-report button present");
+
 }
 
 console.log(failed ? `\n${failed} test(s) FAILED` : "\nAll tests passed");

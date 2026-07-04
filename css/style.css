@@ -220,3 +220,22 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
 }
 .link-sel:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
 .link-clear { padding: 4px 10px; font-size: 11.5px; }
+
+/* ---------- research conclusions ---------- */
+.verdicts { display: grid; gap: 10px; }
+.v-head {
+  font-size: 12px; font-family: var(--font-mono); font-weight: 600;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted);
+  margin: 10px 0 0;
+}
+.v-head:first-child { margin-top: 0; }
+
+/* correlation matrix cells: gold = positive, magenta = negative, depth = strength */
+.rcell { font-weight: 600; }
+.rcell sup { color: var(--text); }
+.rp0 { color: var(--muted); }
+.rp1 { color: var(--gold); }
+.rp2 { color: var(--gold); background: rgba(233, 180, 76, 0.12); }
+.rn0 { color: var(--muted); }
+.rn1 { color: var(--magenta); }
+.rn2 { color: var(--magenta); background: rgba(225, 91, 135, 0.12); }

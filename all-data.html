@@ -85,8 +85,11 @@
 
     <!-- ============ conclusions ============ -->
     <section class="panel">
-      <div class="panel-head"><h2>Conclusions</h2><span class="src-tag">auto-generated from loaded data</span></div>
-      <ul class="verdicts" id="verdictList"></ul>
+      <div class="panel-head">
+        <h2>Conclusions</h2><span class="src-tag">auto-generated from loaded data</span>
+        <button class="btn ghost" id="copyConcBtn" type="button">Copy for report</button>
+      </div>
+      <div class="verdicts" id="verdictList"></div>
     </section>
 
     <!-- ============ game results ============ -->
@@ -178,6 +181,13 @@
           </div>
           <p class="hint" id="unmatchedNote"></p>
         </div>
+      </div>
+      <div id="corrWrap" hidden>
+        <h3 class="v-head" style="margin-top:18px">Correlation matrix — GEQ components × game outcomes</h3>
+        <div class="table-scroll">
+          <table id="corrTable"><thead></thead><tbody></tbody></table>
+        </div>
+        <p class="hint" id="corrNote"></p>
       </div>
     </section>
 
