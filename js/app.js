@@ -1,173 +1,24 @@
-/* Escape The Debt — Analytics Dashboard
-   Static, client-side only. CSVs are detected by their column headers:
-     - has "EventType"            -> Event Stream   (EscapeDebt_Analytics.csv)
-     - has "Outcome"              -> Run Summary    (EscapeDebt_RunSummary.csv)
-     - has "TotalDebt" and "Day"  -> Daily History  (EscapeDebt_DailyHistory.csv)
-   Re-uploads are merged with full-row dedupe, so appended files are safe. */
+/* Escape The Debt — Dashboard page (index.html)
+   Page-specific rendering. Shared parsing/merge/persistence lives in core.js. */
 
 (function () {
   "use strict";
 
-  // ---------- constants ----------
-  const STORE_KEY = "etd-dashboard-v1";
+  const { state, C, G, N, norm, avg, fmt, fmtRM, fmtPct, esc, makeChart, downloadCSV } = window.ETD;
   const PAGE_SIZE = 20;
-  const C = {
-    gold: "#e9b44c", cyan: "#57c7dd", magenta: "#e15b87",
-    green: "#46c68f", amber: "#f0a24c", muted: "#8da0b2",
-    line: "#26313f", text: "#e9eef3",
-  };
-  const SLOT_LABEL = { events: "Event Stream", runs: "Run Summary", daily: "Daily History" };
 
-  // ---------- state ----------
-  const state = { events: [], runs: [], daily: [] };
-  const keySets = { events: new Set(), runs: new Set(), daily: new Set() };
-  const colMaps = { events: null, runs: null, daily: null }; // normalized -> actual header
-  const charts = {};
   let metric = "TotalDebt";
   let runSort = { key: "CompositeScore", dir: -1 };
   let evFilter = { session: "", type: "", search: "", page: 0 };
-
-  // ---------- utils ----------
-  const norm = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, "");
-  const rowKey = (row) => JSON.stringify(Object.entries(row).sort());
   const $ = (sel) => document.querySelector(sel);
 
-  function buildColMap(ds) {
-    const map = {};
-    const sample = state[ds][0];
-    if (sample) for (const k of Object.keys(sample)) map[norm(k)] = k;
-    colMaps[ds] = map;
-  }
-  function G(ds, row, name) {
-    const actual = colMaps[ds] && colMaps[ds][norm(name)];
-    return actual !== undefined ? row[actual] : undefined;
-  }
-  function N(ds, row, name) {
-    const v = parseFloat(G(ds, row, name));
-    return Number.isFinite(v) ? v : NaN;
-  }
-  const avg = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : NaN);
-  const fmt = (n, d = 0) =>
-    Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: 0 }) : "–";
-  const fmtRM = (n) => (Number.isFinite(n) ? "RM " + fmt(n) : "–");
-  const fmtPct = (n) => (Number.isFinite(n) ? fmt(n, 1) + "%" : "–");
-  const esc = (s) =>
-    String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-
-  let toastTimer;
-  function toast(msg) {
-    $("#toast").textContent = msg;
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => ($("#toast").textContent = ""), 6000);
-  }
-
-  // ---------- detection & merge ----------
-  function detectDataset(fields, filename) {
-    const f = new Set(fields.map(norm));
-    if (f.has("eventtype")) return "events";
-    if (f.has("outcome")) return "runs";
-    if (f.has("totaldebt") && f.has("day")) return "daily";
-    const name = norm(filename || "");
-    if (name.includes("analytics")) return "events";
-    if (name.includes("runsummary")) return "runs";
-    if (name.includes("dailyhistory")) return "daily";
-    return null;
-  }
-
-  function mergeRows(ds, rows) {
-    let added = 0;
-    for (const row of rows) {
-      const k = rowKey(row);
-      if (!keySets[ds].has(k)) {
-        keySets[ds].add(k);
-        state[ds].push(row);
-        added++;
-      }
-    }
-    if (!colMaps[ds]) buildColMap(ds);
-    return added;
-  }
-
-  function ingestParsed(results, filename) {
-    const fields = results.meta && results.meta.fields ? results.meta.fields : [];
-    const ds = detectDataset(fields, filename);
-    if (!ds) {
-      toast(`"${filename}" not recognised — headers don't match any of the three exports.`);
-      return;
-    }
-    const rows = results.data.filter((r) => Object.values(r).some((v) => String(v).trim() !== ""));
-    const added = mergeRows(ds, rows);
-    toast(`${filename} → ${SLOT_LABEL[ds]}: ${added} new row${added === 1 ? "" : "s"}${added < rows.length ? ` (${rows.length - added} duplicates skipped)` : ""}`);
-    renderAll();
-    save();
-  }
-
-  function handleFiles(fileList) {
-    for (const file of fileList) {
-      Papa.parse(file, {
-        header: true,
-        skipEmptyLines: true,
-        complete: (res) => ingestParsed(res, file.name),
-        error: () => toast(`Could not read ${file.name}.`),
-      });
-    }
-  }
-
-  // ---------- persistence ----------
-  function save() {
-    try {
-      const json = JSON.stringify(state);
-      if (json.length > 4_500_000) return; // too big for localStorage; keep session-only
-      localStorage.setItem(STORE_KEY, json);
-    } catch (e) { /* private mode / quota — session-only is fine */ }
-  }
-  function restore() {
-    try {
-      const raw = localStorage.getItem(STORE_KEY);
-      if (!raw) return;
-      const saved = JSON.parse(raw);
-      for (const ds of ["events", "runs", "daily"]) {
-        if (Array.isArray(saved[ds]) && saved[ds].length) mergeRows(ds, saved[ds]);
-      }
-      renderAll();
-    } catch (e) { /* corrupt store — start clean */ }
-  }
-  function clearAll() {
-    for (const ds of ["events", "runs", "daily"]) {
-      state[ds] = [];
-      keySets[ds].clear();
-      colMaps[ds] = null;
-    }
-    try { localStorage.removeItem(STORE_KEY); } catch (e) {}
-    evFilter = { session: "", type: "", search: "", page: 0 };
-    renderAll();
-    toast("All data cleared.");
-  }
-
-  // ---------- rendering ----------
-  function renderAll() {
-    for (const ds of ["events", "runs", "daily"]) {
-      const loaded = state[ds].length > 0;
-      const slot = document.querySelector(`.slot[data-slot="${ds}"]`);
-      slot.classList.toggle("loaded", loaded);
-      $(`#status-${ds}`).textContent = loaded ? "Loaded" : "Waiting for file";
-      $(`#meta-${ds}`).textContent = loaded
-        ? `${state[ds].length} rows · ${countSessions(ds)} sessions`
-        : "";
-      document.querySelectorAll(`[data-empty="${ds}"]`).forEach((el) => (el.hidden = loaded));
-      document.querySelectorAll(`[data-full="${ds}"]`).forEach((el) => (el.hidden = !loaded));
-    }
+  // ---------- page render (called by core after any data change) ----------
+  window.renderPage = function () {
     $("#exportRunsBtn").hidden = state.runs.length === 0;
     if (state.runs.length) { renderOverview(); renderOutcomes(); renderRunTable(); }
     if (state.daily.length) renderTrajectories();
     if (state.events.length) renderEvents();
-  }
-
-  function countSessions(ds) {
-    const s = new Set();
-    for (const row of state[ds]) s.add(G(ds, row, "SessionId"));
-    return s.size;
-  }
+  };
 
   // --- overview KPIs ---
   function renderOverview() {
@@ -182,11 +33,6 @@
   }
 
   // --- outcomes + mode comparison ---
-  function makeChart(id, cfg) {
-    if (charts[id]) charts[id].destroy();
-    charts[id] = new Chart($("#" + id), cfg);
-  }
-
   function renderOutcomes() {
     const runs = state.runs;
     const counts = {};
@@ -204,7 +50,7 @@
         datasets: [{
           data: labels.map((l) => counts[l]),
           backgroundColor: labels.map(colorFor),
-          borderColor: "#161c25",
+          borderColor: C.panel,
           borderWidth: 3,
         }],
       },
@@ -251,7 +97,6 @@
 
   // --- daily trajectories ---
   function renderTrajectories() {
-    // group by session, sort by timestamp, split into segments when Day resets
     const bySession = new Map();
     for (const row of state.daily) {
       const sid = G("daily", row, "SessionId");
@@ -259,7 +104,7 @@
       bySession.get(sid).push(row);
     }
     const datasets = [];
-    for (const [sid, rows] of bySession) {
+    for (const [, rows] of bySession) {
       rows.sort((a, b) => String(G("daily", a, "Timestamp")).localeCompare(String(G("daily", b, "Timestamp"))));
       let seg = [], prevDay = -Infinity, segIdx = 0;
       const flush = () => {
@@ -324,11 +169,7 @@
         labels: types.map(([t]) => t),
         datasets: [{ data: types.map(([, b]) => b.count), backgroundColor: C.gold }],
       },
-      options: {
-        indexAxis: "y",
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-      },
+      options: { indexAxis: "y", maintainAspectRatio: false, plugins: { legend: { display: false } } },
     });
 
     const stressed = types
@@ -344,14 +185,9 @@
           backgroundColor: stressed.map(([, v]) => (v <= 0 ? C.green : C.magenta)),
         }],
       },
-      options: {
-        indexAxis: "y",
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-      },
+      options: { indexAxis: "y", maintainAspectRatio: false, plugins: { legend: { display: false } } },
     });
 
-    // filter dropdowns (preserve selection)
     const sessions = new Map();
     for (const r of ev) {
       const sid = G("events", r, "SessionId");
@@ -438,57 +274,9 @@
     }).join("");
   }
 
-  // ---------- events / wiring ----------
-  document.querySelectorAll(".slot").forEach((slot) =>
-    slot.addEventListener("click", () => $("#fileInput").click()));
-  $("#fileInput").addEventListener("change", (e) => {
-    handleFiles(e.target.files);
-    e.target.value = "";
-  });
-
-  // full-page drag & drop
-  let dragDepth = 0;
-  document.addEventListener("dragenter", (e) => {
-    e.preventDefault();
-    if (++dragDepth === 1) $("#dropVeil").classList.add("on");
-  });
-  document.addEventListener("dragover", (e) => e.preventDefault());
-  document.addEventListener("dragleave", () => {
-    if (--dragDepth <= 0) { dragDepth = 0; $("#dropVeil").classList.remove("on"); }
-  });
-  document.addEventListener("drop", (e) => {
-    e.preventDefault();
-    dragDepth = 0;
-    $("#dropVeil").classList.remove("on");
-    if (e.dataTransfer && e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
-  });
-
-  $("#clearBtn").addEventListener("click", () => {
-    if (confirm("Remove all loaded data from this dashboard?")) clearAll();
-  });
-
-  $("#loadSampleBtn").addEventListener("click", async () => {
-    const files = ["EscapeDebt_Analytics.csv", "EscapeDebt_RunSummary.csv", "EscapeDebt_DailyHistory.csv"];
-    for (const f of files) {
-      try {
-        const res = await fetch("sample_data/" + f);
-        if (!res.ok) throw new Error(res.status);
-        const text = await res.text();
-        ingestParsed(Papa.parse(text, { header: true, skipEmptyLines: true }), f);
-      } catch (err) {
-        toast(`Couldn't load sample ${f} — are you running from a local file? Serve the folder or use GitHub Pages.`);
-      }
-    }
-  });
-
-  $("#exportRunsBtn").addEventListener("click", () => {
-    const csv = Papa.unparse(state.runs);
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = "EscapeDebt_RunSummary_merged.csv";
-    a.click();
-    URL.revokeObjectURL(a.href);
-  });
+  // ---------- page wiring ----------
+  $("#exportRunsBtn").addEventListener("click", () =>
+    downloadCSV("runs", "EscapeDebt_RunSummary_merged.csv"));
 
   $("#metricSeg").addEventListener("click", (e) => {
     const btn = e.target.closest(".seg-btn");
@@ -510,17 +298,4 @@
       runSort = { key, dir: runSort.key === key ? -runSort.dir : -1 };
       renderRunTable();
     }));
-
-  // ---------- chart theme ----------
-  Chart.defaults.color = C.muted;
-  Chart.defaults.borderColor = C.line;
-  Chart.defaults.font.family = '"IBM Plex Mono", monospace';
-  Chart.defaults.font.size = 11;
-
-  // ---------- go ----------
-  renderAll();
-  restore();
-
-  // test hook (used by tools/test.js — harmless in production)
-  window.__etd = { detectDataset, ingestParsed, clearAll, state };
 })();

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>All Data — Escape The Debt Analytics</title>
+<meta name="description" content="Combined view of every row collected across the three Escape The Debt CSV exports." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="css/style.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div class="drop-veil" id="dropVeil" aria-hidden="true">
+  <div class="drop-veil-inner">Drop CSV files anywhere</div>
+</div>
+
+<nav class="top-nav">
+  <div class="wrap nav-row">
+    <span class="brand">ESCAPE THE DEBT · ANALYTICS</span>
+    <div class="nav-links">
+      <a href="index.html">Dashboard</a>
+      <a href="all-data.html" class="active" aria-current="page">All Data</a>
+      <a href="#" id="geqLink" target="_blank" rel="noopener">GEQ Toolkit ↗</a>
+    </div>
+  </div>
+</nav>
+
+<header class="site-head">
+  <div class="wrap head-row">
+    <div>
+      <p class="eyebrow">PSM Evaluation Toolkit · Local only, nothing uploaded</p>
+      <h1>All Data <span class="thin">/ Combined Collection</span></h1>
+    </div>
+    <div class="head-actions">
+      <button class="btn ghost" id="loadSampleBtn" type="button">Load sample data</button>
+      <button class="btn ghost danger" id="clearBtn" type="button">Clear all data</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ file slots (shared with dashboard) ============ -->
+  <section class="ledger" aria-label="Data files">
+    <p class="ledger-note">Data loaded here is shared with the Dashboard page. Drop CSVs anywhere, or click a slot.</p>
+    <div class="slot-row">
+      <button class="slot" data-slot="events" type="button">
+        <span class="slot-file">EscapeDebt_Analytics.csv</span>
+        <span class="slot-name">Event Stream</span>
+        <span class="slot-status" id="status-events">Waiting for file</span>
+        <span class="slot-meta" id="meta-events"></span>
+      </button>
+      <button class="slot" data-slot="runs" type="button">
+        <span class="slot-file">EscapeDebt_RunSummary.csv</span>
+        <span class="slot-name">Run Summary</span>
+        <span class="slot-status" id="status-runs">Waiting for file</span>
+        <span class="slot-meta" id="meta-runs"></span>
+      </button>
+      <button class="slot" data-slot="daily" type="button">
+        <span class="slot-file">EscapeDebt_DailyHistory.csv</span>
+        <span class="slot-name">Daily History</span>
+        <span class="slot-status" id="status-daily">Waiting for file</span>
+        <span class="slot-meta" id="meta-daily"></span>
+      </button>
+    </div>
+    <input type="file" id="fileInput" accept=".csv,text/csv" multiple hidden />
+    <p class="toast" id="toast" role="status" aria-live="polite"></p>
+  </section>
+
+  <p class="empty panel" id="ad-empty">No data loaded yet — drop any of the three CSVs above (or load the sample data) and every table and chart on this page will fill in.</p>
+
+  <div id="ad-content" hidden>
+
+    <!-- ============ collection overview ============ -->
+    <section class="panel">
+      <div class="panel-head"><h2>Collection overview</h2><span class="src-tag">all files combined</span></div>
+      <div class="kpi-grid">
+        <div class="kpi"><span class="kpi-label">Total rows</span><span class="kpi-value" id="ad-rows">–</span></div>
+        <div class="kpi"><span class="kpi-label">Sessions</span><span class="kpi-value" id="ad-sessions">–</span></div>
+        <div class="kpi"><span class="kpi-label">Players</span><span class="kpi-value" id="ad-players">–</span></div>
+        <div class="kpi"><span class="kpi-label">Runs recorded</span><span class="kpi-value" id="ad-runs">–</span></div>
+        <div class="kpi"><span class="kpi-label">Files loaded</span><span class="kpi-value" id="ad-files">–</span></div>
+        <div class="kpi"><span class="kpi-label">Date range</span><span class="kpi-value small" id="ad-range">–</span></div>
+      </div>
+      <div class="grid-2" style="margin-top:16px">
+        <div class="chart-card">
+          <h3>Rows per dataset</h3>
+          <div class="chart-box sq"><canvas id="adRowsChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3>Rows collected per date <span class="hint">(stacked by dataset)</span></h3>
+          <div class="chart-box sq"><canvas id="adTimelineChart"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ session coverage ============ -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Session coverage</h2><span class="src-tag">data QA</span>
+        <span class="hint" id="coverageCount"></span>
+      </div>
+      <p class="hint" style="margin-top:0">One row per session across all three files — a quick way to spot participants whose exports are incomplete before analysis.</p>
+      <div class="table-scroll">
+        <table id="coverageTable">
+          <thead><tr>
+            <th>Session</th><th>Player</th><th>Mode</th>
+            <th class="num">Event rows</th><th class="num">Daily rows</th><th class="num">Run rows</th>
+            <th>Outcomes</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ full raw tables ============ -->
+    <section class="panel" id="raw-runs">
+      <div class="panel-head">
+        <h2>Run Summary — full table</h2><span class="src-tag">EscapeDebt_RunSummary.csv</span>
+        <button class="btn ghost" id="rawExport-runs" type="button">Download merged CSV</button>
+      </div>
+      <div class="empty" data-empty="runs">No run summary data loaded.</div>
+      <div data-full="runs" hidden>
+        <div class="table-scroll raw"><table><thead></thead><tbody></tbody></table></div>
+        <div class="pager">
+          <button class="btn ghost" id="rawPrev-runs" type="button">‹ Prev</button>
+          <span class="hint" id="rawInfo-runs"></span>
+          <button class="btn ghost" id="rawNext-runs" type="button">Next ›</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="raw-daily">
+      <div class="panel-head">
+        <h2>Daily History — full table</h2><span class="src-tag">EscapeDebt_DailyHistory.csv</span>
+        <button class="btn ghost" id="rawExport-daily" type="button">Download merged CSV</button>
+      </div>
+      <div class="empty" data-empty="daily">No daily history data loaded.</div>
+      <div data-full="daily" hidden>
+        <div class="table-scroll raw"><table><thead></thead><tbody></tbody></table></div>
+        <div class="pager">
+          <button class="btn ghost" id="rawPrev-daily" type="button">‹ Prev</button>
+          <span class="hint" id="rawInfo-daily"></span>
+          <button class="btn ghost" id="rawNext-daily" type="button">Next ›</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="raw-events">
+      <div class="panel-head">
+        <h2>Event Stream — full table</h2><span class="src-tag">EscapeDebt_Analytics.csv</span>
+        <button class="btn ghost" id="rawExport-events" type="button">Download merged CSV</button>
+      </div>
+      <div class="empty" data-empty="events">No event stream data loaded.</div>
+      <div data-full="events" hidden>
+        <div class="table-scroll raw"><table><thead></thead><tbody></tbody></table></div>
+        <div class="pager">
+          <button class="btn ghost" id="rawPrev-events" type="button">‹ Prev</button>
+          <span class="hint" id="rawInfo-events"></span>
+          <button class="btn ghost" id="rawNext-events" type="button">Next ›</button>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<footer class="wrap foot">
+  <p>Escape The Debt — FYP evaluation dashboard · static &amp; open source · all data stays in this browser tab
+    (saved to localStorage until you clear it).</p>
+</footer>
+
+<script src="js/core.js"></script>
+<script src="js/alldata.js"></script>
+</body>
+</html>

@@ -24,7 +24,15 @@ Drag any of them (in any order, any filename) onto the page — the dashboard id
 - drop exports collected from **multiple participants' machines** into one dashboard and analyse them together;
 - download the combined run table back out via **Download merged CSV** for SPSS/Excel/R analysis in the FYP report.
 
-## What you get
+## Pages
+
+- **Dashboard** (`index.html`) — analysis: KPIs, ending distribution, Guided vs Standard, trajectories, event insights.
+- **All Data** (`all-data.html`) — the combined record of everything collected: collection KPIs (total rows, sessions, players, date range), rows-per-dataset and collection-timeline charts, a **session coverage table** that flags participants with missing files before you analyse, and the **full raw tables** for all three datasets (every column, paginated, sticky headers) each with its own *Download merged CSV* button.
+- **GEQ Toolkit** — nav link to the companion Game Experience Questionnaire toolkit. Set your URL in the `GEQ_URL` constant at the top of `js/core.js` (the link hides itself while empty).
+
+Data is shared between pages through `localStorage`, so files dropped on one page appear on the other.
+
+## What you get on the Dashboard
 
 - **Overview KPIs** — runs, players, win rate, average debt reduced, average final stress, average composite score.
 - **Ending distribution** — Win / Burnout / Survived doughnut.
@@ -63,18 +71,21 @@ Covers header detection, dedupe on re-upload, appended-file merging, and that ev
 ## Project structure
 
 ```
-index.html          page structure
+index.html          Dashboard page
+all-data.html       All Data page (combined tables & collection charts)
 css/style.css       theme (ledger-ink + ringgit-gold)
-js/app.js           parsing, detection, merge, charts, tables
+js/core.js          shared: detection, merge/dedupe, persistence, drag & drop  ← GEQ_URL lives here
+js/app.js           Dashboard rendering
+js/alldata.js       All Data rendering
 sample_data/        three example exports (synthetic data)
-tools/test.js       headless jsdom smoke tests
+tools/test.js       headless jsdom smoke tests (both pages)
 ```
 
 Dependencies are loaded from CDN at runtime: [PapaParse](https://www.papaparse.com/) (CSV parsing) and [Chart.js](https://www.chartjs.org/) (charts). No build step.
 
 ## Adapting to schema changes
 
-Column access is tolerant (case/underscore-insensitive), so `debt_reduction_pct` and `DebtReductionPct` both work. If a column is renamed to something entirely different in `AnalyticsManager.cs`, update the names used in `js/app.js` (`G(...)` / `N(...)` calls) and, if the *detection* columns change, the `detectDataset` function at the top of the file.
+Column access is tolerant (case/underscore-insensitive), so `debt_reduction_pct` and `DebtReductionPct` both work. If a column is renamed to something entirely different in `AnalyticsManager.cs`, update the names used in `js/app.js` / `js/alldata.js` (`G(...)` / `N(...)` calls) and, if the *detection* columns change, the `detectDataset` function in `js/core.js`.
 
 ## License
 
