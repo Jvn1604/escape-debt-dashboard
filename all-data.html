@@ -98,9 +98,10 @@
           <h3>Ending distribution</h3>
           <div class="chart-box sq"><canvas id="adOutcomeChart"></canvas></div>
         </div>
-        <div class="chart-card">
+        <div class="chart-card" id="adModeCard">
           <h3>Guided vs Standard <span class="hint">(averages, % scale)</span></h3>
           <div class="chart-box sq"><canvas id="adModeChart"></canvas></div>
+          <p class="hint nomode-note" hidden>This export has no <code>Mode</code> column, so Guided vs Standard can't be compared. Add a Mode field to AnalyticsManager's CSV export to enable this chart.</p>
           <div class="mode-stats" id="adModeStats"></div>
         </div>
       </div>

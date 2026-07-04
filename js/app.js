@@ -5,7 +5,7 @@
   "use strict";
 
   const { state, C, G, N, norm, avg, fmt, fmtRM, fmtPct, esc, makeChart, downloadCSV,
-          renderOutcomeDoughnut, renderModeComparison } = window.ETD;
+          renderOutcomeDoughnut, renderModeComparison, parseTs } = window.ETD;
   const PAGE_SIZE = 20;
 
   let metric = "TotalDebt";
@@ -36,7 +36,10 @@
   // --- outcomes + mode comparison (shared builders in core.js) ---
   function renderOutcomes() {
     renderOutcomeDoughnut("outcomeChart");
-    renderModeComparison("modeChart", "#modeStats");
+    const ok = renderModeComparison("modeChart", "#modeStats");
+    document.querySelector("#modeCard .chart-box").hidden = !ok;
+    document.querySelector("#modeCard .nomode-note").hidden = ok;
+    document.querySelector("#modeStats").hidden = !ok;
   }
 
   // --- daily trajectories ---
@@ -49,7 +52,7 @@
     }
     const datasets = [];
     for (const [, rows] of bySession) {
-      rows.sort((a, b) => String(G("daily", a, "Timestamp")).localeCompare(String(G("daily", b, "Timestamp"))));
+      rows.sort((a, b) => parseTs(G("daily", a, "Timestamp")) - parseTs(G("daily", b, "Timestamp")));
       let seg = [], prevDay = -Infinity, segIdx = 0;
       const flush = () => {
         if (!seg.length) return;

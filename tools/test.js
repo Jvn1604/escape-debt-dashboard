@@ -81,6 +81,17 @@ console.log("--- index.html ---");
   // 6 — clear resets everything
   app.clearAll();
   assert(app.state.runs.length === 0 && !doc.querySelector(".slot.loaded"), "clear all empties state and slots");
+
+  // regression: real exports have no Mode column and d/m/yyyy timestamps
+  app.clearAll();
+  const noMode = 'SessionId,PlayerName,Timestamp,Outcome,Rank,DaysUsed,MaxDays,DebtReduced,DebtReductionPct,FinalStress,CompositeScore\n' +
+                 'S1,me3,21/6/2026 20:22,Survived,C,3,10,1000,25,40,5000\n';
+  app.ingestParsed(parsed(noMode), "EscapeDebt_RunSummary.csv");
+  assert(doc.querySelector("#modeCard .nomode-note").hidden === false, "mode card explains itself when Mode column is absent");
+  assert(doc.querySelector("#modeCard .chart-box").hidden === true, "mode chart hidden when Mode column is absent");
+  assert(doc.getElementById("kpi-debtpct").textContent === "25%", "KPIs still render from mode-less export");
+  assert(win.ETD.parseTs("2/6/2026 1:05") < win.ETD.parseTs("10/6/2026 1:05"), "d/m/yyyy timestamps sort chronologically");
+  app.clearAll();
 }
 
 /* ================= All Data / Conclusions page ================= */

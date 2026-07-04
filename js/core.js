@@ -202,6 +202,15 @@
     URL.revokeObjectURL(a.href);
   }
 
+  // Timestamp parser: handles ISO strings and the game's d/m/yyyy h:mm format.
+  function parseTs(s) {
+    const str = String(s || "").trim();
+    const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (m) return new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], +(m[6] || 0)).getTime();
+    const t = Date.parse(str);
+    return Number.isFinite(t) ? t : 0;
+  }
+
   // Participant/player matching key: case/punctuation-insensitive, and letter
   // O treated as zero so IDs like "PO1" and "P01" pair up despite typos.
   const matchKey = (s) => norm(s).replace(/o/g, "0");
@@ -236,13 +245,17 @@
     });
   }
 
+  const hasCol = (ds, name) => !!(colMaps[ds] && colMaps[ds][norm(name)]);
+
   function splitByMode(rows, ds) {
     const byMode = { Standard: [], Guided: [] };
     for (const r of rows) byMode[norm(G(ds, r, "Mode")) === "guided" ? "Guided" : "Standard"].push(r);
     return byMode;
   }
 
+  // Returns false (and renders nothing) when the export has no Mode column.
   function renderModeComparison(canvasId, statsSel) {
+    if (!hasCol("runs", "Mode")) return false;
     const byMode = splitByMode(state.runs, "runs");
     const stat = (rows, col) => avg(rows.map((r) => N("runs", r, col)).filter(Number.isFinite));
     const winRate = (rows) =>
@@ -338,7 +351,7 @@
     state, DATASETS, SLOT_LABEL, FILE_NAME, ID_COL, C,
     G, N, norm, avg, fmt, fmtRM, fmtPct, esc, matchKey,
     makeChart, toast, downloadCSV, countSessions,
-    renderOutcomeDoughnut, renderModeComparison, splitByMode,
+    renderOutcomeDoughnut, renderModeComparison, splitByMode, hasCol, parseTs,
     fieldOrder,
   };
 

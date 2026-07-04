@@ -6,7 +6,7 @@
   "use strict";
 
   const { state, DATASETS, FILE_NAME, C, G, N, norm, avg, fmt, fmtPct, esc, matchKey,
-          makeChart, downloadCSV, renderOutcomeDoughnut, renderModeComparison, splitByMode } = window.ETD;
+          makeChart, downloadCSV, renderOutcomeDoughnut, renderModeComparison, splitByMode, hasCol } = window.ETD;
   const $ = (sel) => document.querySelector(sel);
 
   const CORE = [
@@ -33,7 +33,10 @@
     if (!any) return;
     if (state.runs.length) {
       renderOutcomeDoughnut("adOutcomeChart");
-      renderModeComparison("adModeChart", "#adModeStats");
+      const ok = renderModeComparison("adModeChart", "#adModeStats");
+      document.querySelector("#adModeCard .chart-box").hidden = !ok;
+      document.querySelector("#adModeCard .nomode-note").hidden = ok;
+      document.querySelector("#adModeStats").hidden = !ok;
     }
     if (state.geq.length) renderGeq();
     renderCombined();
@@ -72,7 +75,7 @@
       if (Number.isFinite(s)) g.scores.push(s);
       const d = N("runs", r, "DebtReductionPct");
       if (Number.isFinite(d)) g.debtPcts.push(d);
-      g.modes.add(norm(G("runs", r, "Mode")) === "guided" ? "Guided" : "Standard");
+      if (hasCol("runs", "Mode")) g.modes.add(norm(G("runs", r, "Mode")) === "guided" ? "Guided" : "Standard");
       const o = norm(G("runs", r, "Outcome"));
       const order = { win: 3, survived: 2, burnout: 1 };
       if ((order[o] || 0) > (order[norm(g.best)] || 0)) g.best = G("runs", r, "Outcome");
@@ -200,7 +203,7 @@
     $("#matchTable tbody").innerHTML = matched.map((m) => `
       <tr>
         <td>${esc(m.id)}</td>
-        <td>${[...m.game.modes].map((md) => `<span class="chip ${md.toLowerCase()}">${md}</span>`).join(" ")}</td>
+        <td>${m.game.modes.size ? [...m.game.modes].map((md) => `<span class="chip ${md.toLowerCase()}">${md}</span>`).join(" ") : "–"}</td>
         <td class="num">${m.game.runs.length}</td>
         <td><span class="chip ${norm(m.game.best)}">${esc(m.game.best)}</span></td>
         <td class="num">${fmt(avg(m.game.scores))}</td>
