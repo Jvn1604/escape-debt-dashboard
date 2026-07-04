@@ -32,6 +32,7 @@ const files = ["EscapeDebt_Analytics.csv", "EscapeDebt_RunSummary.csv", "EscapeD
 const texts = {};
 for (const f of files) texts[f] = read("sample_data", f);
 const parsed = (t) => Papa.parse(t, { header: true, skipEmptyLines: true });
+const REAL_GEQ_HEADER = "\"participant_id\",\"gender\",\"game\",\"started_at\",\"finished_at\",\"duration_seconds\",\"demo_age\",\"demo_gaming_freq\",\"core_item1\",\"core_item2\",\"core_item3\",\"core_item4\",\"core_item5\",\"core_item6\",\"core_item7\",\"core_item8\",\"core_item9\",\"core_item10\",\"core_item11\",\"core_item12\",\"core_item13\",\"core_item14\",\"core_item15\",\"core_item16\",\"core_item17\",\"core_item18\",\"core_item19\",\"core_item20\",\"core_item21\",\"core_item22\",\"core_item23\",\"core_item24\",\"core_item25\",\"core_item26\",\"core_item27\",\"core_item28\",\"core_item29\",\"core_item30\",\"core_item31\",\"core_item32\",\"core_item33\",\"core_score_Competence\",\"core_score_Sensory_and_Imaginative_Immersion\",\"core_score_Flow\",\"core_score_Tension_Annoyance\",\"core_score_Challenge\",\"core_score_Negative_Affect\",\"core_score_Positive_Affect\",\"postgame_item1\",\"postgame_item2\",\"postgame_item3\",\"postgame_item4\",\"postgame_item5\",\"postgame_item6\",\"postgame_item7\",\"postgame_item8\",\"postgame_item9\",\"postgame_item10\",\"postgame_item11\",\"postgame_item12\",\"postgame_item13\",\"postgame_item14\",\"postgame_item15\",\"postgame_item16\",\"postgame_item17\",\"postgame_score_Positive_Experience\",\"postgame_score_Negative_Experience\",\"postgame_score_Tiredness\",\"postgame_score_Returning_to_Reality\"";
 
 /* ================= Dashboard page ================= */
 console.log("--- index.html ---");
@@ -82,44 +83,60 @@ console.log("--- index.html ---");
   assert(app.state.runs.length === 0 && !doc.querySelector(".slot.loaded"), "clear all empties state and slots");
 }
 
-/* ================= All Data page ================= */
+/* ================= All Data / Conclusions page ================= */
 console.log("--- all-data.html ---");
 {
   const win = boot("all-data.html", ["core.js", "alldata.js"]);
   const app = win.__etd;
   const doc = win.document;
 
+  // GEQ detection — synthetic headers, real export header row, filename fallback
+  assert(app.detectDataset(["participant_id", "core_score_Flow", "core_score_Competence"], "x.csv") === "geq",
+    "detects GEQ by participant_id + core_score columns");
+  const realHeader = REAL_GEQ_HEADER;
+  const realFields = Papa.parse(realHeader).data[0];
+  assert(app.detectDataset(realFields, "geq_all_2026-07-04.csv") === "geq",
+    `real geq-toolkit export header (${realFields.length} cols) detected as GEQ`);
+  assert(app.detectDataset(["A", "B"], "geq_all_2026-07-04.csv") === "geq", "filename fallback for geq exports");
+
   assert(doc.getElementById("ad-empty").hidden === false, "empty notice shown before any data");
 
-  // load only two of the three files — coverage should flag the gap
+  // load runs + geq samples -> conclusions, GEQ charts and combined section
   app.ingestParsed(parsed(texts["EscapeDebt_RunSummary.csv"]), "EscapeDebt_RunSummary.csv");
-  app.ingestParsed(parsed(texts["EscapeDebt_DailyHistory.csv"]), "EscapeDebt_DailyHistory.csv");
+  app.ingestParsed(parsed(read("sample_data", "geq_all.csv")), "geq_all.csv");
 
-  assert(doc.getElementById("ad-empty").hidden === true && doc.getElementById("ad-content").hidden === false,
-    "content appears once any file is loaded");
-  assert(doc.getElementById("ad-rows").textContent === "64", `total rows combined (got ${doc.getElementById("ad-rows").textContent}, want 64)`);
-  assert(doc.getElementById("ad-sessions").textContent === "6", "session count across datasets");
-  assert(doc.getElementById("ad-files").textContent === "2 / 3", "files-loaded KPI shows 2 / 3");
-  assert(doc.getElementById("ad-range").textContent.includes("2026-06-20"), "date range detected from timestamps");
+  assert(doc.getElementById("ad-content").hidden === false, "content appears once data is loaded");
+  const verdicts = doc.querySelectorAll("#verdictList .verdict");
+  assert(verdicts.length >= 5, `conclusions generated (got ${verdicts.length} verdict items)`);
+  assert([...verdicts].some((v) => v.textContent.includes("win rate")), "gameplay conclusion mentions win rate");
+  assert([...verdicts].some((v) => v.textContent.includes("Positive Affect")), "GEQ conclusion mentions Positive Affect");
+  assert([...verdicts].some((v) => /r = -?\d/.test(v.textContent)), "combined conclusion reports a correlation");
 
   const chartIds = win.Chart.created.map((c) => c.el);
-  assert(chartIds.includes("adRowsChart") && chartIds.includes("adTimelineChart"), "collection charts rendered");
+  for (const id of ["adOutcomeChart", "adModeChart", "geqRadarChart", "geqPostChart", "combScatter"]) {
+    assert(chartIds.includes(id), `chart rendered: ${id}`);
+  }
+  assert(doc.querySelectorAll("#geqTable tbody tr").length === 5, "GEQ table lists all 5 participants");
+  assert(doc.getElementById("combinedSec").hidden === false, "combined section visible when IDs match");
+  assert(doc.querySelectorAll("#matchTable tbody tr").length === 5, "all 5 participants matched to game runs");
+  assert(doc.getElementById("combR").textContent.includes("n = 5"), "correlation reports n = 5");
+  assert(doc.getElementById("unmatchedNote").textContent === "", "no unmatched-participants warning when all match");
+  assert(doc.getElementById("status-geq").textContent === "Loaded", "GEQ slot flips to loaded");
+  assert(doc.getElementById("dl-events").disabled === true && doc.getElementById("dl-runs").disabled === false,
+    "download buttons reflect which datasets are loaded");
 
-  const covRows = doc.querySelectorAll("#coverageTable tbody tr");
-  assert(covRows.length === 6, "coverage table lists all sessions");
-  assert(doc.querySelectorAll("#coverageTable td.missing").length === 6, "coverage flags missing event rows for every session");
+  // unmatched participant is reported
+  const geqLines = read("sample_data", "geq_all.csv").trimEnd().split(/\r?\n/);
+  const stranger = geqLines[0] + "\n" + geqLines[1].replace('"Kayal"', '"Stranger"');
+  app.ingestParsed(parsed(stranger), "geq_all.csv");
+  assert(doc.getElementById("unmatchedNote").textContent.includes("Stranger"),
+    "unmatched GEQ participant is flagged with a hint");
 
-  // full raw table: all 35 run-summary columns, paginated
-  assert(doc.querySelectorAll("#raw-runs thead th").length === 35, "run summary raw table shows all 35 columns");
-  assert(doc.querySelectorAll("#raw-runs tbody tr").length === 6, "run summary raw table lists all rows");
-  assert(doc.querySelectorAll("#raw-daily tbody tr").length === 15, "daily raw table paginates to 15 rows");
-  assert(doc.querySelector("#raw-events [data-full='events']").hidden === true, "event raw table hidden while file absent");
+  // matchKey pairs PO1 with P01 (letter O vs zero)
+  assert(win.ETD.matchKey("PO1") === win.ETD.matchKey("p01"), "matchKey pairs PO1 with P01");
 
-  // now add the third file
-  app.ingestParsed(parsed(texts["EscapeDebt_Analytics.csv"]), "EscapeDebt_Analytics.csv");
-  assert(doc.getElementById("ad-files").textContent === "3 / 3", "files-loaded KPI updates to 3 / 3");
-  assert(doc.querySelectorAll("#coverageTable td.missing").length === 0, "coverage gaps clear once events arrive");
-  assert(doc.querySelectorAll("#raw-events tbody tr").length === 15, "event raw table renders after upload");
+  // GEQ link points at the toolkit
+  assert(doc.getElementById("geqLink").href.includes("geq-toolkit"), "GEQ nav link targets the geq-toolkit site");
 }
 
 console.log(failed ? `\n${failed} test(s) FAILED` : "\nAll tests passed");

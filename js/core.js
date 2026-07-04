@@ -12,7 +12,7 @@
   "use strict";
 
   // ====== EDIT ME: link to your GEQ Toolkit (leave "" to hide the nav link) ======
-  const GEQ_URL = " https://jvn1604.github.io/geq-toolkit/ " ;
+  const GEQ_URL = "https://jvn1604.github.io/geq-toolkit/index.html";
   // ===============================================================================
 
   const STORE_KEY = "etd-dashboard-v1";
@@ -21,19 +21,21 @@
     green: "#46c68f", amber: "#f0a24c", muted: "#8da0b2",
     line: "#26313f", text: "#e9eef3", panel: "#161c25",
   };
-  const SLOT_LABEL = { events: "Event Stream", runs: "Run Summary", daily: "Daily History" };
+  const SLOT_LABEL = { events: "Event Stream", runs: "Run Summary", daily: "Daily History", geq: "GEQ Responses" };
   const FILE_NAME = {
     events: "EscapeDebt_Analytics.csv",
     runs: "EscapeDebt_RunSummary.csv",
     daily: "EscapeDebt_DailyHistory.csv",
+    geq: "geq_all.csv",
   };
-  const DATASETS = ["events", "runs", "daily"];
+  const ID_COL = { events: "SessionId", runs: "SessionId", daily: "SessionId", geq: "participant_id" };
+  const DATASETS = ["events", "runs", "daily", "geq"];
 
   // ---------- state ----------
-  const state = { events: [], runs: [], daily: [] };
-  const keySets = { events: new Set(), runs: new Set(), daily: new Set() };
-  const colMaps = { events: null, runs: null, daily: null }; // normalized -> actual header
-  const fieldOrder = { events: null, runs: null, daily: null }; // original column order
+  const state = { events: [], runs: [], daily: [], geq: [] };
+  const keySets = { events: new Set(), runs: new Set(), daily: new Set(), geq: new Set() };
+  const colMaps = { events: null, runs: null, daily: null, geq: null }; // normalized -> actual header
+  const fieldOrder = { events: null, runs: null, daily: null, geq: null }; // original column order
   const charts = {};
 
   // ---------- utils ----------
@@ -74,17 +76,20 @@
 
   function countSessions(ds) {
     const s = new Set();
-    for (const row of state[ds]) s.add(G(ds, row, "SessionId"));
+    for (const row of state[ds]) s.add(G(ds, row, ID_COL[ds]));
+    s.delete(undefined);
     return s.size;
   }
 
   // ---------- detection & merge ----------
   function detectDataset(fields, filename) {
     const f = new Set(fields.map(norm));
+    if (f.has("participantid") && [...f].some((x) => x.startsWith("corescore"))) return "geq";
     if (f.has("eventtype")) return "events";
     if (f.has("outcome")) return "runs";
     if (f.has("totaldebt") && f.has("day")) return "daily";
     const name = norm(filename || "");
+    if (name.includes("geq")) return "geq";
     if (name.includes("analytics")) return "events";
     if (name.includes("runsummary")) return "runs";
     if (name.includes("dailyhistory")) return "daily";
@@ -172,7 +177,7 @@
       if (slot) {
         slot.classList.toggle("loaded", loaded);
         $(`#status-${ds}`).textContent = loaded ? "Loaded" : "Waiting for file";
-        $(`#meta-${ds}`).textContent = loaded ? `${state[ds].length} rows · ${countSessions(ds)} sessions` : "";
+        $(`#meta-${ds}`).textContent = loaded ? `${state[ds].length} rows · ${countSessions(ds)} ${ds === "geq" ? "participants" : "sessions"}` : "";
       }
       document.querySelectorAll(`[data-empty="${ds}"]`).forEach((el) => (el.hidden = loaded));
       document.querySelectorAll(`[data-full="${ds}"]`).forEach((el) => (el.hidden = !loaded));
@@ -195,6 +200,79 @@
     a.download = filename;
     a.click();
     URL.revokeObjectURL(a.href);
+  }
+
+  // Participant/player matching key: case/punctuation-insensitive, and letter
+  // O treated as zero so IDs like "PO1" and "P01" pair up despite typos.
+  const matchKey = (s) => norm(s).replace(/o/g, "0");
+
+  // ---------- shared game charts (used by Dashboard and All Data) ----------
+  function renderOutcomeDoughnut(canvasId) {
+    const runs = state.runs;
+    const counts = {};
+    for (const r of runs) {
+      const o = G("runs", r, "Outcome") || "Unknown";
+      counts[o] = (counts[o] || 0) + 1;
+    }
+    const labels = Object.keys(counts);
+    const colorFor = (o) =>
+      ({ win: C.green, burnout: C.magenta, survived: C.amber }[norm(o)] || C.muted);
+    makeChart(canvasId, {
+      type: "doughnut",
+      data: {
+        labels,
+        datasets: [{
+          data: labels.map((l) => counts[l]),
+          backgroundColor: labels.map(colorFor),
+          borderColor: C.panel,
+          borderWidth: 3,
+        }],
+      },
+      options: {
+        maintainAspectRatio: false,
+        plugins: { legend: { position: "bottom" } },
+        cutout: "62%",
+      },
+    });
+  }
+
+  function splitByMode(rows, ds) {
+    const byMode = { Standard: [], Guided: [] };
+    for (const r of rows) byMode[norm(G(ds, r, "Mode")) === "guided" ? "Guided" : "Standard"].push(r);
+    return byMode;
+  }
+
+  function renderModeComparison(canvasId, statsSel) {
+    const byMode = splitByMode(state.runs, "runs");
+    const stat = (rows, col) => avg(rows.map((r) => N("runs", r, col)).filter(Number.isFinite));
+    const winRate = (rows) =>
+      rows.length ? (rows.filter((r) => norm(G("runs", r, "Outcome")) === "win").length / rows.length) * 100 : NaN;
+
+    makeChart(canvasId, {
+      type: "bar",
+      data: {
+        labels: ["Win rate", "Debt reduced %", "Final stress"],
+        datasets: [
+          { label: `Standard (${byMode.Standard.length})`, backgroundColor: C.gold,
+            data: [winRate(byMode.Standard), stat(byMode.Standard, "DebtReductionPct"), stat(byMode.Standard, "FinalStress")] },
+          { label: `Guided (${byMode.Guided.length})`, backgroundColor: C.cyan,
+            data: [winRate(byMode.Guided), stat(byMode.Guided, "DebtReductionPct"), stat(byMode.Guided, "FinalStress")] },
+        ],
+      },
+      options: {
+        maintainAspectRatio: false,
+        scales: { y: { min: 0, max: 100, ticks: { callback: (v) => v + "%" } } },
+        plugins: { legend: { position: "bottom" } },
+      },
+    });
+
+    if (statsSel && $(statsSel)) {
+      $(statsSel).innerHTML = ["Standard", "Guided"].map((m) => {
+        const rows = byMode[m];
+        return `<div class="ms">${m}: <b>${fmt(stat(rows, "CompositeScore"))}</b> avg score ·
+                <b>${fmt(stat(rows, "DaysUsed"), 1)}</b> avg days</div>`;
+      }).join("");
+    }
   }
 
   // ---------- wiring (shared UI on every page) ----------
@@ -257,9 +335,10 @@
 
   // ---------- public API for page scripts ----------
   window.ETD = {
-    state, DATASETS, SLOT_LABEL, FILE_NAME, C,
-    G, N, norm, avg, fmt, fmtRM, fmtPct, esc,
+    state, DATASETS, SLOT_LABEL, FILE_NAME, ID_COL, C,
+    G, N, norm, avg, fmt, fmtRM, fmtPct, esc, matchKey,
     makeChart, toast, downloadCSV, countSessions,
+    renderOutcomeDoughnut, renderModeComparison, splitByMode,
     fieldOrder,
   };
 

@@ -4,7 +4,8 @@
 (function () {
   "use strict";
 
-  const { state, C, G, N, norm, avg, fmt, fmtRM, fmtPct, esc, makeChart, downloadCSV } = window.ETD;
+  const { state, C, G, N, norm, avg, fmt, fmtRM, fmtPct, esc, makeChart, downloadCSV,
+          renderOutcomeDoughnut, renderModeComparison } = window.ETD;
   const PAGE_SIZE = 20;
 
   let metric = "TotalDebt";
@@ -32,67 +33,10 @@
     $("#kpi-score").textContent = fmt(avg(runs.map((r) => N("runs", r, "CompositeScore")).filter(Number.isFinite)));
   }
 
-  // --- outcomes + mode comparison ---
+  // --- outcomes + mode comparison (shared builders in core.js) ---
   function renderOutcomes() {
-    const runs = state.runs;
-    const counts = {};
-    for (const r of runs) {
-      const o = G("runs", r, "Outcome") || "Unknown";
-      counts[o] = (counts[o] || 0) + 1;
-    }
-    const labels = Object.keys(counts);
-    const colorFor = (o) =>
-      ({ win: C.green, burnout: C.magenta, survived: C.amber }[norm(o)] || C.muted);
-    makeChart("outcomeChart", {
-      type: "doughnut",
-      data: {
-        labels,
-        datasets: [{
-          data: labels.map((l) => counts[l]),
-          backgroundColor: labels.map(colorFor),
-          borderColor: C.panel,
-          borderWidth: 3,
-        }],
-      },
-      options: {
-        maintainAspectRatio: false,
-        plugins: { legend: { position: "bottom" } },
-        cutout: "62%",
-      },
-    });
-
-    const byMode = { Standard: [], Guided: [] };
-    for (const r of runs) {
-      const m = norm(G("runs", r, "Mode")) === "guided" ? "Guided" : "Standard";
-      byMode[m].push(r);
-    }
-    const stat = (rows, col) => avg(rows.map((r) => N("runs", r, col)).filter(Number.isFinite));
-    const winRate = (rows) =>
-      rows.length ? (rows.filter((r) => norm(G("runs", r, "Outcome")) === "win").length / rows.length) * 100 : NaN;
-
-    makeChart("modeChart", {
-      type: "bar",
-      data: {
-        labels: ["Win rate", "Debt reduced %", "Final stress"],
-        datasets: [
-          { label: `Standard (${byMode.Standard.length})`, backgroundColor: C.gold,
-            data: [winRate(byMode.Standard), stat(byMode.Standard, "DebtReductionPct"), stat(byMode.Standard, "FinalStress")] },
-          { label: `Guided (${byMode.Guided.length})`, backgroundColor: C.cyan,
-            data: [winRate(byMode.Guided), stat(byMode.Guided, "DebtReductionPct"), stat(byMode.Guided, "FinalStress")] },
-        ],
-      },
-      options: {
-        maintainAspectRatio: false,
-        scales: { y: { min: 0, max: 100, ticks: { callback: (v) => v + "%" } } },
-        plugins: { legend: { position: "bottom" } },
-      },
-    });
-
-    $("#modeStats").innerHTML = ["Standard", "Guided"].map((m) => {
-      const rows = byMode[m];
-      return `<div class="ms">${m}: <b>${fmt(stat(rows, "CompositeScore"))}</b> avg score ·
-              <b>${fmt(stat(rows, "DaysUsed"), 1)}</b> avg days</div>`;
-    }).join("");
+    renderOutcomeDoughnut("outcomeChart");
+    renderModeComparison("modeChart", "#modeStats");
   }
 
   // --- daily trajectories ---

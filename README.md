@@ -15,6 +15,7 @@ The game's `AnalyticsManager` (Export Analytics CSV button on the Result screen,
 | `EscapeDebt_Analytics.csv` | one row per gameplay action (overwritten per export) | `EventType` column |
 | `EscapeDebt_RunSummary.csv` | one row per completed run (appends) | `Outcome` column |
 | `EscapeDebt_DailyHistory.csv` | one row per in-game day (appends) | `TotalDebt` + `Day` columns |
+| `geq_all_*.csv` (GEQ Toolkit export) | one row per questionnaire respondent | `participant_id` + `core_score_*` columns |
 
 Drag any of them (in any order, any filename) onto the page — the dashboard identifies each file **by its column headers**, not its name. Header matching is case-insensitive and ignores underscores/spaces, and the filename is used as a fallback if the headers are unrecognised.
 
@@ -26,9 +27,9 @@ Drag any of them (in any order, any filename) onto the page — the dashboard id
 
 ## Pages
 
-- **Dashboard** (`index.html`) — analysis: KPIs, ending distribution, Guided vs Standard, trajectories, event insights.
-- **All Data** (`all-data.html`) — the combined record of everything collected: collection KPIs (total rows, sessions, players, date range), rows-per-dataset and collection-timeline charts, a **session coverage table** that flags participants with missing files before you analyse, and the **full raw tables** for all three datasets (every column, paginated, sticky headers) each with its own *Download merged CSV* button.
-- **GEQ Toolkit** — nav link to the companion Game Experience Questionnaire toolkit. Set your URL in the `GEQ_URL` constant at the top of `js/core.js` (the link hides itself while empty).
+- **Dashboard** (`index.html`) — gameplay analysis: KPIs, ending distribution, Guided vs Standard, day-by-day trajectories, event insights, run table.
+- **All Data / Conclusions** (`all-data.html`) — the outcome page. It combines the game CSVs with the **GEQ Toolkit** questionnaire export and auto-writes a conclusion from whatever is loaded: gameplay verdicts (win rate, burnouts, mode comparison), GEQ verdicts (engagement, tension, post-game experience, on the 0–4 GEQ scale), and — when GEQ `participant_id`s match in-game `PlayerName`s — per-participant correlations (Pearson r) between experience scores and in-game performance, with a scatter plot and matched-participants table. It also shows the key graphs from both sides (ending doughnut, mode comparison, GEQ core radar, post-game bars) and merged-CSV downloads for all four datasets. Matching is typo-tolerant: `PO1` and `P01` pair up.
+- **GEQ Toolkit** — nav link to the companion questionnaire app (URL set via `GEQ_URL` in `js/core.js`).
 
 Data is shared between pages through `localStorage`, so files dropped on one page appear on the other.
 
@@ -72,12 +73,12 @@ Covers header detection, dedupe on re-upload, appended-file merging, and that ev
 
 ```
 index.html          Dashboard page
-all-data.html       All Data page (combined tables & collection charts)
+all-data.html       All Data / Conclusions page (game + GEQ combined)
 css/style.css       theme (ledger-ink + ringgit-gold)
 js/core.js          shared: detection, merge/dedupe, persistence, drag & drop  ← GEQ_URL lives here
 js/app.js           Dashboard rendering
-js/alldata.js       All Data rendering
-sample_data/        three example exports (synthetic data)
+js/alldata.js       Conclusions, GEQ charts, participant matching & correlation
+sample_data/        four example exports (synthetic data, matching IDs)
 tools/test.js       headless jsdom smoke tests (both pages)
 ```
 
