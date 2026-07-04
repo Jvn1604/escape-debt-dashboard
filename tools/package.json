@@ -1,0 +1,6 @@
+{
+  "name": "etd-dashboard-tests",
+  "private": true,
+  "scripts": { "test": "node test.js" },
+  "dependencies": { "jsdom": "^24.0.0", "papaparse": "^5.4.1" }
+}

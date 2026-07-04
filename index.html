@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Escape The Debt — Analytics Dashboard</title>
+<meta name="description" content="Local, static analytics dashboard for the Escape The Debt serious game (FYP evaluation). Drop the exported CSVs — everything runs in your browser." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="css/style.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div class="drop-veil" id="dropVeil" aria-hidden="true">
+  <div class="drop-veil-inner">Drop CSV files anywhere</div>
+</div>
+
+<header class="site-head">
+  <div class="wrap head-row">
+    <div>
+      <p class="eyebrow">PSM Evaluation Toolkit · Local only, nothing uploaded</p>
+      <h1>Escape The Debt <span class="thin">/ Run Analytics</span></h1>
+    </div>
+    <div class="head-actions">
+      <button class="btn ghost" id="loadSampleBtn" type="button">Load sample data</button>
+      <button class="btn ghost danger" id="clearBtn" type="button">Clear all data</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ LEDGER: the three file slots ============ -->
+  <section class="ledger" aria-label="Data files">
+    <p class="ledger-note">Drag the three exported CSVs onto the page, or click a slot to browse.
+      Files are recognised by their column headers, so the order doesn't matter —
+      and re-uploading appends new rows without duplicating old ones.</p>
+    <div class="slot-row">
+      <button class="slot" data-slot="events" type="button">
+        <span class="slot-file">EscapeDebt_Analytics.csv</span>
+        <span class="slot-name">Event Stream</span>
+        <span class="slot-status" id="status-events">Waiting for file</span>
+        <span class="slot-meta" id="meta-events"></span>
+      </button>
+      <button class="slot" data-slot="runs" type="button">
+        <span class="slot-file">EscapeDebt_RunSummary.csv</span>
+        <span class="slot-name">Run Summary</span>
+        <span class="slot-status" id="status-runs">Waiting for file</span>
+        <span class="slot-meta" id="meta-runs"></span>
+      </button>
+      <button class="slot" data-slot="daily" type="button">
+        <span class="slot-file">EscapeDebt_DailyHistory.csv</span>
+        <span class="slot-name">Daily History</span>
+        <span class="slot-status" id="status-daily">Waiting for file</span>
+        <span class="slot-meta" id="meta-daily"></span>
+      </button>
+    </div>
+    <input type="file" id="fileInput" accept=".csv,text/csv" multiple hidden />
+    <p class="toast" id="toast" role="status" aria-live="polite"></p>
+  </section>
+
+  <!-- ============ OVERVIEW KPIs ============ -->
+  <section class="panel" id="sec-overview">
+    <div class="panel-head"><h2>Overview</h2><span class="src-tag">from Run Summary</span></div>
+    <div class="empty" data-empty="runs">Upload <code>EscapeDebt_RunSummary.csv</code> to see headline results.</div>
+    <div class="kpi-grid" data-full="runs" hidden>
+      <div class="kpi"><span class="kpi-label">Completed runs</span><span class="kpi-value" id="kpi-runs">–</span></div>
+      <div class="kpi"><span class="kpi-label">Players</span><span class="kpi-value" id="kpi-players">–</span></div>
+      <div class="kpi"><span class="kpi-label">Win rate</span><span class="kpi-value" id="kpi-winrate">–</span></div>
+      <div class="kpi"><span class="kpi-label">Avg debt reduced</span><span class="kpi-value" id="kpi-debtpct">–</span></div>
+      <div class="kpi"><span class="kpi-label">Avg final stress</span><span class="kpi-value" id="kpi-stress">–</span></div>
+      <div class="kpi"><span class="kpi-label">Avg composite score</span><span class="kpi-value" id="kpi-score">–</span></div>
+    </div>
+  </section>
+
+  <!-- ============ OUTCOMES + MODE COMPARISON ============ -->
+  <section class="panel" id="sec-outcomes">
+    <div class="panel-head"><h2>Outcomes &amp; Guided vs Standard</h2><span class="src-tag">from Run Summary</span></div>
+    <div class="empty" data-empty="runs">Upload <code>EscapeDebt_RunSummary.csv</code> to compare endings and modes.</div>
+    <div class="grid-2" data-full="runs" hidden>
+      <div class="chart-card">
+        <h3>Ending distribution</h3>
+        <div class="chart-box sq"><canvas id="outcomeChart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>Mode comparison <span class="hint">(averages, % scale)</span></h3>
+        <div class="chart-box sq"><canvas id="modeChart"></canvas></div>
+        <div class="mode-stats" id="modeStats"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DAILY TRAJECTORIES ============ -->
+  <section class="panel" id="sec-daily">
+    <div class="panel-head">
+      <h2>Day-by-day trajectories</h2><span class="src-tag">from Daily History</span>
+      <div class="seg" role="group" aria-label="Metric" id="metricSeg">
+        <button class="seg-btn active" data-metric="TotalDebt" type="button">Debt</button>
+        <button class="seg-btn" data-metric="Stress" type="button">Stress</button>
+        <button class="seg-btn" data-metric="Cash" type="button">Cash</button>
+        <button class="seg-btn" data-metric="Reputation" type="button">Reputation</button>
+      </div>
+    </div>
+    <div class="empty" data-empty="daily">Upload <code>EscapeDebt_DailyHistory.csv</code> to plot debt and stress curves over the 10 days.</div>
+    <div data-full="daily" hidden>
+      <div class="chart-box wide"><canvas id="trajChart"></canvas></div>
+      <p class="hint">One line per run · <span class="lg gold">gold = Standard</span> · <span class="lg cyan">cyan = Guided</span></p>
+    </div>
+  </section>
+
+  <!-- ============ EVENT STREAM ============ -->
+  <section class="panel" id="sec-events">
+    <div class="panel-head"><h2>Event stream</h2><span class="src-tag">from Analytics</span></div>
+    <div class="empty" data-empty="events">Upload <code>EscapeDebt_Analytics.csv</code> to break down every recorded action.</div>
+    <div data-full="events" hidden>
+      <div class="grid-2">
+        <div class="chart-card">
+          <h3>Actions by type</h3>
+          <div class="chart-box sq"><canvas id="eventTypeChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3>Average stress impact per action <span class="hint">(− relieves · + adds)</span></h3>
+          <div class="chart-box sq"><canvas id="stressDeltaChart"></canvas></div>
+        </div>
+      </div>
+      <div class="explorer">
+        <div class="explorer-bar">
+          <select id="fltSession"><option value="">All sessions</option></select>
+          <select id="fltType"><option value="">All event types</option></select>
+          <input type="search" id="fltSearch" placeholder="Search name / choice…" />
+          <span class="hint" id="fltCount"></span>
+        </div>
+        <div class="table-scroll">
+          <table id="eventTable">
+            <thead><tr>
+              <th>Time</th><th>Day</th><th>Player</th><th>Type</th><th>Event</th><th>Choice</th>
+              <th class="num">Cash Δ</th><th class="num">Debt Δ</th><th class="num">Stress Δ</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="pager">
+          <button class="btn ghost" id="pgPrev" type="button">‹ Prev</button>
+          <span id="pgInfo" class="hint"></span>
+          <button class="btn ghost" id="pgNext" type="button">Next ›</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ RUN TABLE ============ -->
+  <section class="panel" id="sec-runs">
+    <div class="panel-head">
+      <h2>All runs</h2><span class="src-tag">from Run Summary</span>
+      <button class="btn ghost" id="exportRunsBtn" type="button" hidden>Download merged CSV</button>
+    </div>
+    <div class="empty" data-empty="runs">Upload <code>EscapeDebt_RunSummary.csv</code> to list every completed run.</div>
+    <div class="table-scroll" data-full="runs" hidden>
+      <table id="runTable">
+        <thead><tr>
+          <th data-sort="PlayerName">Player</th>
+          <th data-sort="Mode">Mode</th>
+          <th data-sort="Outcome">Outcome</th>
+          <th data-sort="Rank">Rank</th>
+          <th data-sort="DaysUsed" class="num">Days</th>
+          <th data-sort="DebtReduced" class="num">Debt reduced</th>
+          <th data-sort="DebtReductionPct" class="num">%</th>
+          <th data-sort="FinalStress" class="num">Final stress</th>
+          <th data-sort="CompositeScore" class="num">Score</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<footer class="wrap foot">
+  <p>Escape The Debt — FYP evaluation dashboard · static &amp; open source · all data stays in this browser tab
+    (saved to localStorage until you clear it).</p>
+</footer>
+
+<script src="js/app.js"></script>
+</body>
+</html>
