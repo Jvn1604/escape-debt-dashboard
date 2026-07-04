@@ -12,7 +12,7 @@
   "use strict";
 
   // ====== EDIT ME: link to your GEQ Toolkit (leave "" to hide the nav link) ======
-  const GEQ_URL = "https://jvn1604.github.io/geq-toolkit/";
+  const GEQ_URL = " https://jvn1604.github.io/geq-toolkit/ " ;
   // ===============================================================================
 
   const STORE_KEY = "etd-dashboard-v1";
